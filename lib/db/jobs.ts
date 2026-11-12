@@ -192,6 +192,31 @@ export function findJobByFingerprint(
   return row ? toJob(row) : null;
 }
 
+export interface JobWithStatus extends JobRow {
+  status: JobStatusValue;
+}
+
+/**
+ * Every stored job with its applied/seen state joined in. `new` is the absence
+ * of a row in job_status, so the COALESCE is what makes the default explicit.
+ */
+export function listJobsWithStatus(
+  db: DatabaseSync = getDb(),
+  limit = 5000,
+): JobWithStatus[] {
+  const rows = db
+    .prepare(
+      `SELECT j.*, COALESCE(s.status, 'new') AS status
+         FROM jobs j
+         LEFT JOIN job_status s ON s.job_id = j.id
+        ORDER BY COALESCE(j.posted_at, j.fetched_at) DESC
+        LIMIT ?`,
+    )
+    .all(limit) as unknown as Array<RawJobRow & { status: string }>;
+
+  return rows.map((row) => ({ ...toJob(row), status: row.status as JobStatusValue }));
+}
+
 export function countJobs(db: DatabaseSync = getDb()): number {
   const row = db.prepare("SELECT COUNT(*) AS n FROM jobs").get() as { n: number };
   return Number(row.n);
