@@ -78,3 +78,32 @@ describe.skipIf(!existsSync(pdfPath))("profile extraction (real CV fixture)", ()
     expect(profile.sections.experience).toBeTruthy();
   });
 });
+
+
+describe("letter-spaced dates (Canva-style layout)", () => {
+  it("computes years from de-spaced month/year text", () => {
+    const text = [
+      "Jane Doe",
+      "Work Experience",
+      "Full Stack Developer",
+      "D E C 2 0 2 2 \u2014 P R E S E N T",
+      "Built distributed systems.",
+    ].join("\n");
+
+    const profile = extractProfile(text);
+    const expected = new Date().getFullYear() - 2022;
+    expect(profile.yearsExperience).toBeGreaterThanOrEqual(Math.max(1, expected - 1));
+  });
+
+  it("does not invent experience from software version lists", () => {
+    const text = [
+      "Jane Doe",
+      "Work Experience",
+      "Desktop Support Technician",
+      "Microsoft Office 2010, 2013, 2016 & 2019",
+      "Windows 7, 8 & 10",
+    ].join("\n");
+    // No date range and no "N years" claim -> nothing to report.
+    expect(extractProfile(text).yearsExperience).toBeNull();
+  });
+});

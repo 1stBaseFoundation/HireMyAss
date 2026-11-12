@@ -1,0 +1,106 @@
+{
+  "jobs": [
+    {
+      "absolute_url": "https://job-boards.greenhouse.io/gitlab/jobs/8638232002",
+      "data_compliance": [
+        {
+          "type": "gdpr",
+          "requires_consent": false,
+          "requires_processing_consent": false,
+          "requires_retention_consent": false,
+          "retention_period": null,
+          "demographic_data_consent_applies": false
+        }
+      ],
+      "internal_job_id": 6449994002,
+      "location": {
+        "name": "Remote, United States"
+      },
+      "metadata": [
+        {
+          "id": 4595831002,
+          "name": "Quota Coverage Type",
+          "value": "n/a",
+          "value_type": "single_select"
+        }
+      ],
+      "id": 8638232002,
+      "updated_at": "2026-11-06T15:25:07-05:00",
+      "requisition_id": "6682",
+      "title": "AI Transformation Owner, CRO",
+      "company_name": "GitLab",
+      "first_published": "2026-07-22T13:38:40-04:00",
+      "language": "en",
+      "application_deadline": null
+    },
+    {
+      "absolute_url": "https://job-boards.greenhouse.io/gitlab/jobs/8857185002",
+      "data_compliance": [
+        {
+          "type": "gdpr",
+          "requires_consent": false,
+          "requires_processing_consent": false,
+          "requires_retention_consent": false,
+          "retention_period": null,
+          "demographic_data_consent_applies": false
+        }
+      ],
+      "internal_job_id": 6545717002,
+      "location": {
+        "name": "Remote, Canada; Remote, United States"
+      },
+      "metadata": [
+        {
+          "id": 4595831002,
+          "name": "Quota Coverage Type",
+          "value": "Overlay",
+          "value_type": "single_select"
+        }
+      ],
+      "id": 8857185002,
+      "updated_at": "2026-11-06T15:25:07-05:00",
+      "requisition_id": "7064",
+      "title": "Associate Renewals Manager, SMB",
+      "company_name": "GitLab",
+      "first_published": "2026-09-29T18:06:03-04:00",
+      "language": "en",
+      "application_deadline": null
+    },
+    {
+      "absolute_url": "https://job-boards.greenhouse.io/gitlab/jobs/8771512002",
+      "data_compliance": [
+        {
+          "type": "gdpr",
+          "requires_consent": false,
+          "requires_processing_consent": false,
+          "requires_retention_consent": false,
+          "retention_period": null,
+          "demographic_data_consent_applies": false
+        }
+      ],
+      "internal_job_id": 6509478002,
+      "location": {
+        "name": "Remote, Canada; Remote, United States"
+      },
+      "metadata": [
+        {
+          "id": 4595831002,
+          "name": "Quota Coverage Type",
+          "value": "n/a",
+          "value_type": "single_select"
+        }
+      ],
+      "id": 8771512002,
+      "updated_at": "2026-11-06T15:25:07-05:00",
+      "requisition_id": "6918",
+      "title": "Backend Engineer, GitLab Orbit",
+      "company_name": "GitLab",
+      "first_published": "2026-10-23T18:47:07-04:00",
+      "language": "en",
+      "application_deadline": null
+    }
+  ],
+  "meta": {
+    "total": 259
+  }
+}

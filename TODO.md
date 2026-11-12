@@ -98,12 +98,25 @@ Deliberately excluded: LinkedIn, Indeed, Glassdoor, Monster — ToS-prohibited a
 - pdf.js v6 teardown lives on the **loading task** (`loadingTask.destroy()`), not the document proxy.
 - Uploaded bytes are **not persisted** — only extracted text + structured facts land in SQLite.
 
-## Phase 3 — Source adapters
-- [ ] `lib/sources/types.ts` — `JobSource` interface, `NormalizedJob`, capability flags
-- [ ] `lib/sources/normalize.ts` — remote_mode / employment_type / region / posted_at coercion
-- [ ] Adapters: `arbeitnow`, `remotive`, `jobicy`, `remoteok`, `himalayas`, `greenhouse`, `lever`, `ashby`
-- [ ] `lib/sources/registry.ts` + TTL cache backed by `source_runs` (Remotive ≥ 6 h — 4 req/day cap)
-- [ ] **GATE 3** — per-adapter fixture tests (the live JSON saved during planning) → normalized shape; zero network in tests
+## Phase 3 — Source adapters  ✅ COMPLETE
+- [x] `lib/sources/types.ts` — `JobSource` interface, capability flags, injectable `fetchImpl` for hermetic tests
+- [x] `lib/sources/normalize.ts` — `toEpochMs`, `inferEmploymentType`, `inferRemoteMode`, `stripHtml`, title/date cleaning
+- [x] Adapters: `boards.ts` (arbeitnow, remotive, jobicy, remoteok, himalayas) + `ats.ts` (greenhouse, lever, ashby)
+- [x] `lib/sources/registry.ts` — registry, allow-listing, `describeSources()`
+- [x] `lib/sources/collect.ts` — fan-out + `source_runs` TTL cache + upsert, per-source error isolation
+- [x] `scripts/fetch-fixtures.mjs` — captures one live payload per source into `tests/fixtures/sources/`
+- [x] **GATE 3** — 13 fixture-driven adapter tests · zero network in the suite · **8/8 adapters verified live (2,678 jobs)** → **59 tests green**
+
+### Phase 3 findings
+- **RemoteOK's element 0 is a legal notice, not a job.** Filtering on `id && position` is required; a
+  naive `json.map` produces a job titled "API Terms of Service".
+- **Arbeitnow's `remote: false` means on-site, not unknown.** Treating an explicit boolean as a hint
+  instead of a fact loses the single most useful filter signal on that board.
+- ATS boards are worth the fan-out: Ashby returns a real `applyUrl` ending in `/application`, and
+  Greenhouse's `absolute_url` is the form itself — strictly better than aggregator listing pages.
+- One broken company board must not kill the source: `fanOut()` isolates failures and only throws if
+  *every* board failed.
+- Fixtures caught a real `stripHtml` bug — tags left stray spaces either side of inserted newlines.
 
 ## Phase 4 — Search, rank, dedupe
 - [ ] `lib/match/fingerprint.ts` — `sha256(company|title|location)`, cross-source dedupe

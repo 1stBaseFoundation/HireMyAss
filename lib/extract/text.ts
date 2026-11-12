@@ -28,13 +28,37 @@ export function sniffType(buffer: Uint8Array): "pdf" | "docx" | "text" | "unknow
   return "unknown";
 }
 
+/**
+ * PDFs frequently encode UTF-8 punctuation into CP1252, so an em dash arrives
+ * as "ÔÇö" and a smart quote as "ÔÇÿ". Left alone these poison every downstream
+ * regex (date ranges, quoted titles) and look broken in the UI.
+ */
+const MOJIBAKE: Array<[RegExp, string]> = [
+  [/\u00d4\u00c7\u00f6/g, "\u2014"], // em dash
+  [/\u00d4\u00c7\u00f4/g, "\u2013"], // en dash
+  [/\u00d4\u00c7\u00d6/g, "\u201c"], // left double quote
+  [/\u00d4\u00c7\u00d8/g, "\u201d"], // right double quote
+  [/\u00d4\u00c7\u00d9/g, "\u2018"], // left single quote
+  [/\u00d4\u00c7\u00da/g, "\u2019"], // right single quote
+  [/\u00e2\u0080\u0099/g, "\u2019"],
+  [/\u00e2\u0080\u009c/g, "\u201c"],
+  [/\u00e2\u0080\u009d/g, "\u201d"],
+  [/\u00e2\u0080\u0093/g, "\u2013"],
+  [/\u00e2\u0080\u0094/g, "\u2014"],
+];
+
+function fixMojibake(value: string): string {
+  return MOJIBAKE.reduce((text, [pattern, replacement]) => text.replace(pattern, replacement), value);
+}
+
 function cleanText(input: string): string {
-  return input
-    .replace(/\r\n?/g, "\n")
-    .replace(/[ \t]+\n/g, "\n")
-    .replace(/\n{3,}/g, "\n\n")
-    .replace(/\u00a0/g, " ")
-    .trim();
+  return fixMojibake(
+    input
+      .replace(/\r\n?/g, "\n")
+      .replace(/[ \t]+\n/g, "\n")
+      .replace(/\n{3,}/g, "\n\n")
+      .replace(/\u00a0/g, " "),
+  ).trim();
 }
 
 export async function extractText(

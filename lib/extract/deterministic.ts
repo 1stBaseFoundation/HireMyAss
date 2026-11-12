@@ -140,18 +140,42 @@ function extractTitles(sections: Record<string, string>): string[] {
 
   for (const raw of scope.split("\n")) {
     const line = raw.trim();
-    if (!line || line.length > 60) continue;
-    // Titles start with a capital and stay short; anything else is prose.
-    if (!/^[A-Z0-9]/.test(line)) continue;
+    if (!line || line.length > 90) continue;
     if (line.includes("&")) continue;
-    if (line.split(/\s+/).length > 5) continue;
-    if (/(19|20)\d{2}/.test(line) && !/engineer|developer|technician/i.test(line)) continue;
-    if (!TITLE_WORDS.test(line)) continue;
-    const cleaned = cleanTitleLine(line);
-    if (cleaned.length >= 3 && cleaned.length <= 60) found.push(cleaned);
+
+    // Resumes often put role and employer on one line:
+    //   "Full Stack Developer / Managing Director | 1stBase, JHB - South Africa"
+    // but a headline like "ENGINEER | ENGINEER | TECHNICIAN" must stay intact,
+    // so only split when a right-hand side is NOT itself a role.
+    const parts = line.split("|").map((part) => part.trim()).filter(Boolean);
+    const hasEmployerSide = parts.length > 1 && parts.some((part) => !TITLE_WORDS.test(part));
+    const segments = hasEmployerSide ? parts.filter((part) => TITLE_WORDS.test(part)) : [line];
+
+    for (const segment of segments) {
+      if (!segment || segment.length > 60) continue;
+      // Titles start with a capital and stay short; anything else is prose.
+      if (!/^[A-Z0-9]/.test(segment)) continue;
+      if (segment.split(/\s+/).length > 6) continue;
+      if (/(19|20)\d{2}/.test(segment) && !/engineer|developer|technician/i.test(segment)) continue;
+      if (!TITLE_WORDS.test(segment)) continue;
+      const cleaned = cleanTitleLine(segment);
+      if (cleaned.length >= 3 && cleaned.length <= 60) found.push(cleaned);
+    }
   }
 
   return Array.from(new Set(found)).slice(0, 12);
+}
+
+/**
+ * Canva-style resumes render dates letter-spaced: "D E C 2 0 2 2 — P R E S E N T".
+ * Every date regex fails on that, so collapses runs of single characters
+ * separated by spaces back into words before any year scanning happens.
+ */
+function despacedDateText(input: string): string {
+  return input
+    .replace(/(?:[A-Za-z0-9][ \t]){2,}[A-Za-z0-9]/g, (match) => match.replace(/[ \t]+/g, ""))
+    .replace(/\u00d4\u00c7\u00f6|\u00d4\u00c7\u00f4/g, "-")
+    .replace(/[ÔÒ]/g, "");
 }
 
 /**
@@ -165,12 +189,12 @@ function extractYears(text: string, sections: Record<string, string>): number | 
     .filter((n) => n > 0 && n < 45);
   const explicitBest = explicit.length > 0 ? Math.max(...explicit) : null;
 
-  const inScope = (sections.experience ?? "").replace(/.*date of birth.*/gi, "");
+  const inScope = despacedDateText((sections.experience ?? "").replace(/.*date of birth.*/gi, ""));
   const years: number[] = [];
 
-  const MONTH = "(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\\.?";
-  // "Feb 2020", "October 2018"
-  for (const m of inScope.matchAll(new RegExp(`${MONTH}[,\\s]+((?:19|20)\\d{2})`, "gi"))) {
+  const MONTH = "(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*";
+  // "Feb 2020", "October 2018", and de-spaced "DEC2022" (separator optional).
+  for (const m of inScope.matchAll(new RegExp(`${MONTH}[,\\s]*((?:19|20)\\d{2})`, "gi"))) {
     years.push(Number(m[1]));
   }
   // "2017 - 2018", "2019 to 2021"

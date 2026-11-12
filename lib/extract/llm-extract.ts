@@ -154,10 +154,12 @@ export async function enrichProfile(
     if (keywords.size > before) filled.push(`keywords(+${keywords.size - before})`);
 
     const titles = new Set(merged.titles);
+    const titlesBefore = titles.size;
     for (const title of gaps.titles) {
       if (title.trim().length >= 3) titles.add(title.trim());
     }
     merged.titles = Array.from(titles).slice(0, 12);
+    if (titles.size > titlesBefore) filled.push(`titles(+${titles.size - titlesBefore})`);
 
     return {
       profile: merged,
