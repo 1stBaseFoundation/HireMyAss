@@ -30,6 +30,41 @@ Status: `[ ]` todo · `[~]` in progress · `[x]` done · `[!]` blocked
 Retired: `qwen3-vl-4b-heretic.safetensors` — wrong container (llama.cpp loads GGUF only) and
 Qwen3-VL is absent from llama.cpp's documented mtmd support list. Not used.
 
+## Review stage — ambiguity resolution BEFORE search
+
+Resume parsing produces *claims*, not facts. Every uncertain value must be presented for the
+user to confirm, correct or delete **before a single vacancy is fetched** — a wrong keyword set
+silently poisons every ranking downstream, and the damage is invisible (the list just looks
+"slightly off").
+
+So each extracted field carries **provenance** and **confidence**, not just a value:
+
+| Field | Provenance | Confidence | Default in review |
+|---|---|---|---|
+| keyword | lexicon hit inside the Skills section | high | included |
+| keyword | lexicon hit in prose | medium | included |
+| keyword | model-suggested, not in lexicon | low | **excluded until confirmed** |
+| keyword | model-suggested but contradicted by text | — | **rejected outright** |
+| yearsExperience | explicit "N years" | high | included |
+| yearsExperience | derived from date-range span | medium | included, flagged |
+| yearsExperience | absent | — | shown as a gap to fill |
+| location | city/country gazetteer hit | medium | included |
+| location | model guess | low | needs confirmation |
+| seniority | title cue | high | included |
+| seniority | model guess | low | needs confirmation |
+| email / phone | regex hit | high | included |
+| email / phone | **not found** | — | surfaced as *missing*, **never invented** |
+
+Review screen contract:
+- Every field editable in place; keywords are removable/appendable chips.
+- Low-confidence items are visually distinct and start **excluded**.
+- Missing contact details are described as gaps, not errors (a CV legitimately may omit them).
+- A chat box drives `refine_profile` ("drop Kubernetes, I only used it in 2021").
+- **Search is blocked until "Confirm profile" is pressed.** The confirmed snapshot — not the raw
+  parse — is what ranking and the vacancy query run against.
+- Re-uploading a resume re-opens review; previously confirmed values survive unless the new parse
+  contradicts them.
+
 ## Data sources (response shapes captured live during planning)
 
 Arbeitnow · Remotive · Jobicy · RemoteOK · Himalayas · Greenhouse (+ Lever/Ashby/Workable/SmartRecruiters shape).
@@ -118,7 +153,17 @@ Deliberately excluded: LinkedIn, Indeed, Glassdoor, Monster — ToS-prohibited a
   *every* board failed.
 - Fixtures caught a real `stripHtml` bug — tags left stray spaces either side of inserted newlines.
 
+## Phase 3.5 — Review & confirmation gate  (blocks all searching)
+- [ ] `lib/extract/confidence.ts` — attach provenance + confidence to every parsed field
+- [ ] `profile.confirmed_at` + `profile_draft` JSON column; confirmation is an explicit act
+- [ ] `app/api/profile/confirm/route.ts` — accepts the user-edited snapshot, validates, stores
+- [ ] `/profile` review UI — editable fields, confidence styling, missing-value gaps, chat panel
+- [ ] Search APIs reject requests when `confirmed_at` is null, with a clear "review your profile first" error
+- [ ] **GATE 3.5** — low-confidence keywords start excluded · editing then confirming persists · search refuses to run before confirmation · re-upload preserves confirmed values
+
 ## Phase 4 — Search, rank, dedupe
+> Runs exclusively against the **confirmed** profile snapshot (Phase 3.5). A draft parse is never
+> used for ranking, so the list the user sees always reflects terms they have actually agreed to.
 - [ ] `lib/match/fingerprint.ts` — `sha256(company|title|location)`, cross-source dedupe
 - [ ] `lib/match/score.ts` — IDF keyword overlap (title ×3) + recency decay + location/type fit, emits reasons
 - [ ] `app/api/jobs/search/route.ts` — filters: type / region / remote-mode / posted-within
