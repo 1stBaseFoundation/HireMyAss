@@ -54,7 +54,7 @@ export const env = {
 
   scoring: {
     /** Weight applied to a keyword hit inside the job title. */
-    titleMultiplier: num(process.env.SCORE_TITLE_MULTIPLIER, 3),
+    titleMultiplier: num(process.env.SCORE_TITLE_MULTIPLIER, 5),
     /** Days after which the recency contribution halves. */
     recencyHalfLifeDays: num(process.env.SCORE_RECENCY_HALF_LIFE, 7),
   },
