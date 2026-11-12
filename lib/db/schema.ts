@@ -1,8 +1,11 @@
 /**
  * Schema is embedded as a string rather than a .sql file so it always ships
  * with the build (no fs reads at runtime, no bundler asset-tracing surprises).
+ *
+ * v2 adds the review gate: a profile is not usable for ranking until the user
+ * has explicitly confirmed it (see TODO.md "Review stage").
  */
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 
 export const SCHEMA_SQL = /* sql */ `
 PRAGMA journal_mode = WAL;
@@ -24,6 +27,9 @@ CREATE TABLE IF NOT EXISTS profile (
   locations_json  TEXT NOT NULL DEFAULT '[]',
   source_file     TEXT,
   parse_method    TEXT,
+  -- v2: review gate. NULL confirmed_at means the parse is still a draft.
+  confirmed_at    INTEGER,
+  confidence_json TEXT NOT NULL DEFAULT '{}',
   created_at      INTEGER NOT NULL,
   updated_at      INTEGER NOT NULL
 );

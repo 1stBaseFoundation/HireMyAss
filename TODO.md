@@ -155,19 +155,44 @@ Deliberately excluded: LinkedIn, Indeed, Glassdoor, Monster — ToS-prohibited a
 
 ## Phase 3.5 — Review & confirmation gate  (blocks all searching)
 - [ ] `lib/extract/confidence.ts` — attach provenance + confidence to every parsed field
-- [ ] `profile.confirmed_at` + `profile_draft` JSON column; confirmation is an explicit act
-- [ ] `app/api/profile/confirm/route.ts` — accepts the user-edited snapshot, validates, stores
+- [ ] `profile.confirmed_at` + `profile_draft` JSON column; confirmation is an explicit act  *(done in Phase 4)*
+- [ ] `app/api/profile/confirm/route.ts` — accepts the user-edited snapshot, validates, stores  *(done in Phase 4)*
 - [ ] `/profile` review UI — editable fields, confidence styling, missing-value gaps, chat panel
-- [ ] Search APIs reject requests when `confirmed_at` is null, with a clear "review your profile first" error
+- [ ] **Keyword priority** — pin / deprioritise / soften each term. This is where "which words actually
+      describe the job I want" gets decided by the user, and it replaces the uniform keyword weighting
+      that currently lets "Communication" outrank "React"
+- [ ] Search APIs reject requests when `confirmed_at` is null, with a clear "review your profile first" error  *(done in Phase 4)*
 - [ ] **GATE 3.5** — low-confidence keywords start excluded · editing then confirming persists · search refuses to run before confirmation · re-upload preserves confirmed values
 
-## Phase 4 — Search, rank, dedupe
+## Phase 4 — Search, rank, dedupe  ✅ COMPLETE
 > Runs exclusively against the **confirmed** profile snapshot (Phase 3.5). A draft parse is never
 > used for ranking, so the list the user sees always reflects terms they have actually agreed to.
-- [ ] `lib/match/fingerprint.ts` — `sha256(company|title|location)`, cross-source dedupe
-- [ ] `lib/match/score.ts` — IDF keyword overlap (title ×3) + recency decay + location/type fit, emits reasons
-- [ ] `app/api/jobs/search/route.ts` — filters: type / region / remote-mode / posted-within
-- [ ] **GATE 4** — same job from 3 sources = 1 row · 24h/3d/7d windows correct · reasons reconcile with score
+- [x] `lib/match/fingerprint.ts` — strict + loose keys, hiring-noise normalisation
+- [x] `lib/match/score.ts` — IDF keyword overlap (title ×5) + recency decay + location/type fit, emits reasons
+- [x] `lib/match/dedupe.ts` — collapses the same posting across boards, unions every source reference
+- [x] `lib/match/filters.ts` — type / region / remote-mode / posted-within, plus the applied-seen visibility rules
+- [x] `lib/match/search.ts` — pure ranking over SQLite (no network, no model)
+- [x] `app/api/profile/confirm/route.ts` — the gate (POST confirms the edited snapshot, DELETE withdraws)
+- [x] `app/api/jobs/search/route.ts` — **428 `PROFILE_NOT_CONFIRMED`** before review, ranked results after
+- [x] Schema v2: `confirmed_at`, `confidence_json`, with an `ALTER TABLE` path for v1 databases
+- [x] **GATE 4** — same job from 2 boards = 1 row · 24h/3d/7d windows correct · applied job never returns · gate returns 428 then 200 → **74 tests green**
+
+### Phase 4 findings
+- **Single-letter skills poison everything.** `C` and `R` matched every stray letter, so unrelated
+  jobs scored on "C, Security, Collaboration". Lexicon now requires ≥2 characters for a match (the
+  long forms "c language" / "R language" still resolve) and scoring ignores 1-char keywords, so
+  profiles saved before the fix stop misbehaving too.
+- **Recency was outranking relevance.** At weight 0.2 a "posted today" job with two generic hits beat
+  an exact role match posted 2 days ago. Now 0.14 with title matches at ×5.
+- Dedupe must key on company+title (loose), not company+title+location — boards disagree about the
+  location string, and the strict key is only for storage uniqueness.
+- **Live run:** 2,547 jobs stored, 532 inside a 7-day window, ranked in ~650 ms with a warm cache.
+
+### Known limitation, deferred to Phase 3.5 on purpose
+Keyword weighting is currently uniform, ordered only by how often a term appears in the resume. That
+is why a QA role can outrank an exact React full-stack match: "Collaboration" and "Communication"
+are noise that matches every posting. The correct fix is **user-defined keyword priority in the
+review screen** (pin/prioritise/exclude), not more magic constants in the scorer.
 
 ## Phase 5 — UI
 - [ ] `/` filter chip bar + job cards (score ring, reason chips, source credit link, checkbox, Apply →)

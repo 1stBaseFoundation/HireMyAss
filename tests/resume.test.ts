@@ -32,6 +32,17 @@ describe("lexicon", () => {
     const names = matchSkills("I know C++ and C# and .NET").map((h) => h.canonical);
     expect(names).toEqual(expect.arrayContaining(["C++", "C#", ".NET"]));
   });
+
+  it("never matches a single letter as a language", () => {
+    // "C" and "R" are real skills, but a bare letter in prose is not evidence.
+    const names = matchSkills("Option A or B and C, with R squared").map((h) => h.canonical);
+    expect(names).not.toContain("C");
+    expect(names).not.toContain("R");
+
+    // The explicit long form still works.
+    expect(matchSkills("I write c language").map((h) => h.canonical)).toContain("C");
+    expect(matchSkills("R language for stats").map((h) => h.canonical)).toContain("R");
+  });
 });
 
 describe("sectioning", () => {

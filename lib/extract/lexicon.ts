@@ -32,9 +32,19 @@ function boundaryPattern(alias: string): RegExp {
   return new RegExp(`(?<![a-z0-9_])${escapeRegExp(alias)}(?![a-z0-9_])`, "gi");
 }
 
+/**
+ * Aliases shorter than two characters are excluded from matching.
+ *
+ * Canonical names are added as aliases automatically, and languages like "C"
+ * and "R" would then match every stray letter in a description — which is
+ * exactly what happened: "C" scored against "C, Security, Collaboration" on
+ * unrelated jobs. Single letters stay resolvable via `canonicalSkill()`.
+ */
+const MIN_MATCH_LENGTH = 2;
+
 const MATCHERS: Array<{ entry: SkillEntry; patterns: RegExp[] }> = SKILLS.map((entry) => ({
   entry,
-  patterns: entry.aliases.map(boundaryPattern),
+  patterns: entry.aliases.filter((alias) => alias.length >= MIN_MATCH_LENGTH).map(boundaryPattern),
 }));
 
 export interface SkillHit {

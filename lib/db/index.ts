@@ -30,11 +30,34 @@ export function openDatabase(file: string): DatabaseSync {
 }
 
 /**
+ * Adds a column to an existing table. SQLite has no "ADD COLUMN IF NOT EXISTS",
+ * and CREATE TABLE IF NOT EXISTS silently does nothing on an existing table, so
+ * upgrades need this explicit step.
+ */
+function ensureColumn(
+  db: DatabaseSync,
+  table: string,
+  column: string,
+  definition: string,
+): void {
+  const columns = db.prepare(`PRAGMA table_info(${table})`).all() as unknown as Array<{
+    name: string;
+  }>;
+  if (!columns.some((entry) => entry.name === column)) {
+    db.exec(`ALTER TABLE ${table} ADD COLUMN ${definition}`);
+  }
+}
+
+/**
  * Applies the schema. Written to be safe to run on every boot: all statements
  * are CREATE ... IF NOT EXISTS and the version bump only happens on change.
  */
 export function migrate(db: DatabaseSync): void {
   db.exec(SCHEMA_SQL);
+
+  // v1 -> v2: the review gate.
+  ensureColumn(db, "profile", "confirmed_at", "confirmed_at INTEGER");
+  ensureColumn(db, "profile", "confidence_json", "confidence_json TEXT NOT NULL DEFAULT '{}'");
 
   const current = (db.prepare("PRAGMA user_version").get() as { user_version?: number } | undefined)
     ?.user_version;
