@@ -4,6 +4,7 @@
 *.gguf
 *.safetensors
 *.zip
+*.pdf
 
 # local data
 /data/

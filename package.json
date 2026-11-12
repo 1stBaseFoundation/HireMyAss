@@ -13,10 +13,12 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@napi-rs/canvas": "^1.1.1",
     "clsx": "^2.1.1",
     "lucide-react": "^1.72.0",
     "mammoth": "^1.13.0",
     "next": "16.4.6",
+    "pdfjs-dist": "^6.5.438",
     "react": "19.3.1",
     "react-dom": "19.3.1",
     "unpdf": "^2.1.0",

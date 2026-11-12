@@ -58,22 +58,45 @@ Deliberately excluded: LinkedIn, Indeed, Glassdoor, Monster — ToS-prohibited a
 - Measured VRAM: GPU0 **3.2 GB**, GPU1 **7.9 GB**.
 - OCR smoke test transcribed a generated image verbatim in 4.7 s.
 
-## Phase 1 — Data layer
-- [ ] `lib/db/schema.sql` — `profile`, `jobs`, `job_status`, `source_runs`, `applications`
-- [ ] `lib/db/index.ts` — `node:sqlite` `DatabaseSync` singleton, WAL, idempotent migrations
-- [ ] Repos: `lib/db/jobs.ts`, `lib/db/profile.ts`, `lib/db/sources.ts`
-- [ ] **GATE 1** — schema applies twice idempotently · job upsert · fingerprint uniqueness enforced
+## Phase 1 — Data layer  ✅ COMPLETE
+- [x] `lib/db/schema.sql` → **`lib/db/schema.ts`** (embedded SQL so it never depends on fs/bundler asset tracing)
+- [x] `lib/db/index.ts` — `node:sqlite` `DatabaseSync` singleton, WAL, idempotent migrations, `transaction()`, `parseJson()`
+- [x] Repos: `lib/db/jobs.ts`, `lib/db/profile.ts`, `lib/db/sources.ts`
+- [x] **GATE 1** — schema applies twice idempotently · job upsert · fingerprint uniqueness enforced → **14/14 vitest green**
 
-## Phase 2 — Résumé ingest
-- [ ] `lib/extract/text.ts` — `.docx` via mammoth, `.pdf` via unpdf, magic-byte sniffing
-- [ ] `lib/extract/raster.ts` — pdfjs-dist + `@napi-rs/canvas` → PNG pages (scanned fallback path)
-- [ ] `data/skills.json` + `lib/extract/lexicon.ts` — canonical skills + aliases
-- [ ] `lib/extract/deterministic.ts` — section segmentation, n-grams, years-of-experience, seniority, locations
-- [ ] `lib/llm/client.ts` — OpenAI-compatible fetch wrapper (chat, JSON-schema constrained, health, timeout)
-- [ ] `lib/extract/ocr.ts` — VLM OCR against 8082, prompt tuned for documents
-- [ ] `lib/extract/llm-extract.ts` — fills **only** gaps the lexicon missed, zod-validated, silent fallback
-- [ ] `app/api/resume/route.ts` — multipart upload → stored profile
-- [ ] **GATE 2** — parses `F:\Matthew Tong Curriculum 2022.pdf` · keywords non-empty · scanned-PDF path exercised · byte-identical result when 8081 is stopped
+### Phase 1 findings
+- `node:sqlite` refuses JS booleans as bound values (throws). All 0/1 crosses through `bool.to/from`.
+- Cross-source identity needed **two** keys: strict `fingerprintJob` (company+title+location, the UNIQUE
+  constraint) and `looseFingerprint` (company+title) for spotting the same posting on several boards —
+  boards disagree wildly on the location string ("Remote", "Remote, US", "", "Anywhere").
+- Upserts must never let an `unknown` value overwrite a known one, or the 3rd source to report a job
+  silently erases the fields the 1st source got right.
+
+## Phase 2 — Résumé ingest  ✅ COMPLETE
+- [x] `lib/extract/text.ts` — `.docx` via mammoth, `.pdf` via unpdf, **magic-byte sniffing** (a `.pdf` that is really a `.docx` happens)
+- [x] `lib/extract/raster.ts` — pdfjs-dist + `@napi-rs/canvas` → PNG pages, 2200 px edge cap, `maxPages` guard
+- [x] `lib/extract/skills.json` + `lib/extract/lexicon.ts` — **157 skills / 383 aliases** across 13 categories
+- [x] `lib/extract/deterministic.ts` — sectioning, titles, years, seniority, locations, weighted keywords
+- [x] `lib/llm/client.ts` — OpenAI-compatible wrapper: JSON-schema constrained, health probe, timeouts, `extractJson`
+- [x] `lib/extract/ocr.ts` — VLM OCR against :8082
+- [x] `lib/extract/llm-extract.ts` — gap-fill only, zod-validated, never overwrites evidence
+- [x] `lib/extract/pipeline.ts` — orchestration with `allowLlm` / `allowOcr` switches for hermetic tests
+- [x] `app/api/resume/route.ts` — GET / POST / DELETE, 25 MB cap, extension + magic validation
+- [x] **GATE 2** — parses the real PDF · 24 keywords extracted · scanned path exercised live on GPU (10.7 s) · **identical result with the model stopped** → **39 tests green + 1 live GPU test**
+
+### Phase 2 findings (bugs that only showed up against a real CV)
+- **Qwen3.5-4B is a reasoning model.** First production run returned `content: ""` with
+  `finish_reason: "length"` — it had spent the whole budget inside `reasoning_content`. Fix:
+  `chat_template_kwargs: { enable_thinking: false }` (verified: `finish=stop`, clean JSON).
+  `reasoning_budget: 0` is **not** supported by b11982 — silently ignored.
+- **Naive year math invents experience.** "Microsoft Office 2010, 2013, 2016, 2019" and
+  "Windows 7/8/10" produced a bogus 10-year span. Now only `Month YYYY` / `YYYY–YYYY` ranges count,
+  and "present" resolves to the current year. Real answer: **9 years**.
+- **Title extraction needs shape filters**, not just keywords: "with tasks assigned by manager using a
+  ticketing system" matched because it contained "manager". Now requires a capitalised start, ≤5 words,
+  no `&`.
+- pdf.js v6 teardown lives on the **loading task** (`loadingTask.destroy()`), not the document proxy.
+- Uploaded bytes are **not persisted** — only extracted text + structured facts land in SQLite.
 
 ## Phase 3 — Source adapters
 - [ ] `lib/sources/types.ts` — `JobSource` interface, `NormalizedJob`, capability flags
