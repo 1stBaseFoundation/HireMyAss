@@ -1,0 +1,57 @@
+@import "tailwindcss";
+
+@theme {
+  --color-ink-950: #08090c;
+  --color-ink-900: #0d0f14;
+  --color-ink-850: #12151c;
+  --color-ink-800: #171b24;
+  --color-ink-700: #222836;
+  --color-ink-600: #333c4f;
+  --color-ink-400: #7d8798;
+  --color-ink-200: #c3cad6;
+  --color-ink-50: #eef1f6;
+
+  --color-accent-400: #6ea8fe;
+  --color-accent-500: #4d8bf5;
+  --color-accent-600: #2f6fe0;
+
+  --color-lime-400: #9ae66e;
+  --color-amber-400: #f5c451;
+  --color-rose-400: #f2657a;
+
+  --font-sans: ui-sans-serif, system-ui, "Segoe UI", Roboto, sans-serif;
+  --font-mono: ui-monospace, "Cascadia Code", "Consolas", monospace;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  background-color: var(--color-ink-950);
+  color: var(--color-ink-50);
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--color-accent-500) 40%, transparent);
+}
+
+/* thin scrollbars that match the shell */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-ink-700) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--color-ink-700);
+  border-radius: 999px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}

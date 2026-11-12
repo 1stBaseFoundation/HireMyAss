@@ -1,0 +1,33 @@
+# runtime + models (large binaries, machine-specific)
+/Models/
+/llama/
+*.gguf
+*.safetensors
+*.zip
+
+# local data
+/data/
+/data.db
+/data.db-*
+
+# env
+.env
+.env.local
+.env*.local
+
+# deps / build
+/node_modules/
+/.next/
+/out/
+next-env.d.ts
+*.tsbuildinfo
+
+# os / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# logs
+*.log
+npm-debug.log*
