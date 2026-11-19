@@ -51,6 +51,48 @@ describe("pipeline robustness", () => {
     expect(result.profile.email).toBe("jane.doe@example.com");
     expect(result.profile.keywords).toEqual(expect.arrayContaining(["TypeScript", "React"]));
   });
+
+  it("keeps confirmed values when a re-uploaded résumé omits them", async () => {
+    const first = [
+      "Jane Q Doe",
+      "jane.doe@example.com | London",
+      "Skills:",
+      "TypeScript, React, PostgreSQL",
+      "Work Experience",
+      "Senior Developer",
+      "Acme Ltd 2019 - present",
+    ].join("\n");
+
+    const initial = await ingestResume(new TextEncoder().encode(first), "first.txt", {
+      allowLlm: false,
+      allowOcr: false,
+    });
+    expect(initial.profile.email).toBe("jane.doe@example.com");
+
+    const { confirmProfile } = await import("@/lib/db/profile");
+    confirmProfile();
+
+    // A different document: no contact block, different skills.
+    const second = [
+      "Jane Q Doe",
+      "Skills:",
+      "TypeScript, React",
+      "Work Experience",
+      "Developer",
+      "Acme Ltd 2020 - 2022",
+    ].join("\n");
+
+    const result = await ingestResume(new TextEncoder().encode(second), "second.txt", {
+      allowLlm: false,
+      allowOcr: false,
+    });
+
+    // The confirmed email survives, the review gate reopens, and the note says why.
+    expect(result.profile.email).toBe("jane.doe@example.com");
+    expect(result.profile.confirmedAt).toBeNull();
+    expect(result.notes.join(" ")).toContain("kept confirmed");
+    expect(result.profile.sourceFile).toBe("second.txt");
+  });
 });
 
 describe.skipIf(!existsSync(pdfPath))("pipeline on the real CV", () => {

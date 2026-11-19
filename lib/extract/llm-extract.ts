@@ -46,6 +46,28 @@ export interface EnrichmentResult {
   usedLlm: boolean;
   filled: string[];
   note: string;
+  /** Fields the model filled, so confidence can mark them low-confidence. */
+  modelFields: string[];
+  /** Keywords only the model proposed — never evidence-backed. */
+  modelKeywords: string[];
+  /** Model values that disagreed with deterministic evidence and were dropped. */
+  contradictions: Array<{ field: string; proposed: string; kept: string }>;
+}
+
+function untouched(
+  base: DeterministicProfile,
+  note: string,
+  usedLlm: boolean,
+): EnrichmentResult {
+  return {
+    profile: base,
+    usedLlm,
+    filled: [],
+    note,
+    modelFields: [],
+    modelKeywords: [],
+    contradictions: [],
+  };
 }
 
 const MAX_RESUME_CHARS = 6000;
@@ -81,7 +103,7 @@ export async function enrichProfile(
 ): Promise<EnrichmentResult> {
   const missing = missingFields(base);
   if (missing.length === 0) {
-    return { profile: base, usedLlm: false, filled: [], note: "deterministic pass complete" };
+    return untouched(base, "deterministic pass complete", false);
   }
 
   const source = rawText.slice(0, MAX_RESUME_CHARS);
@@ -104,18 +126,19 @@ export async function enrichProfile(
       extractJson(result.text) ?? extractJson(result.reasoning),
     );
     if (!parsed.success) {
-      return {
-        profile: base,
-        usedLlm: false,
-        filled: [],
-        note: `model returned unusable JSON (${parsed.error.issues[0]?.message ?? "parse error"}; ${
+      return untouched(
+        base,
+        `model returned unusable JSON (${parsed.error.issues[0]?.message ?? "parse error"}; ${
           result.text.length
         } chars content)`,
-      };
+        false,
+      );
     }
 
     const gaps = parsed.data;
     const filled: string[] = [];
+    const modelFields: string[] = [];
+    const contradictions: EnrichmentResult["contradictions"] = [];
     const merged: DeterministicProfile = { ...base };
 
     const takeString = (
@@ -123,9 +146,15 @@ export async function enrichProfile(
       value: string,
     ) => {
       const clean = value.trim();
-      if (!merged[key] && clean) {
+      if (!clean) return;
+      if (!merged[key]) {
         merged[key] = clean;
         filled.push(key);
+        modelFields.push(key);
+      } else if (merged[key] !== clean) {
+        // Evidence wins; record the disagreement so the review screen can show
+        // that the model guessed something the résumé contradicts.
+        contradictions.push({ field: key, proposed: clean, kept: merged[key] as string });
       }
     };
 
@@ -135,20 +164,36 @@ export async function enrichProfile(
     takeString("phone", gaps.phone);
     takeString("location", gaps.location);
 
-    if (!merged.seniority && gaps.seniority) {
+    if (gaps.seniority) {
       const candidate = gaps.seniority.trim() as Seniority;
       if (["junior", "mid", "senior", "lead"].includes(candidate ?? "")) {
-        merged.seniority = candidate;
-        filled.push("seniority");
+        if (!merged.seniority) {
+          merged.seniority = candidate;
+          merged.seniorityCue = "text";
+          filled.push("seniority");
+          modelFields.push("seniority");
+        } else if (merged.seniority !== candidate) {
+          contradictions.push({
+            field: "seniority",
+            proposed: candidate ?? "",
+            kept: merged.seniority,
+          });
+        }
       }
     }
 
-    // Union, never replace: deterministic hits are evidence-backed.
+    // Union, never replace: deterministic hits are evidence-backed. Anything
+    // the model adds beyond them is a suggestion, tracked separately so it can
+    // start excluded on the review screen.
     const keywords = new Set(merged.keywords);
     const before = keywords.size;
+    const modelKeywords: string[] = [];
     for (const keyword of gaps.keywords) {
       const canonical = canonicalSkill(keyword);
-      if (canonical.length >= 2 && canonical.length <= 40) keywords.add(canonical);
+      if (canonical.length < 2 || canonical.length > 40) continue;
+      if (keywords.has(canonical)) continue;
+      keywords.add(canonical);
+      modelKeywords.push(canonical);
     }
     merged.keywords = Array.from(keywords).slice(0, 40);
     if (keywords.size > before) filled.push(`keywords(+${keywords.size - before})`);
@@ -166,15 +211,17 @@ export async function enrichProfile(
       usedLlm: true,
       filled,
       note: filled.length > 0 ? `filled: ${filled.join(", ")}` : "model had nothing to add",
+      modelFields,
+      modelKeywords,
+      contradictions,
     };
   } catch (error) {
-    return {
-      profile: base,
-      usedLlm: false,
-      filled: [],
-      note: `model unavailable, kept deterministic result (${
+    return untouched(
+      base,
+      `model unavailable, kept deterministic result (${
         error instanceof Error ? error.message.slice(0, 120) : String(error)
       })`,
-    };
+      false,
+    );
   }
 }

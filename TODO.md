@@ -153,16 +153,32 @@ Deliberately excluded: LinkedIn, Indeed, Glassdoor, Monster — ToS-prohibited a
   *every* board failed.
 - Fixtures caught a real `stripHtml` bug — tags left stray spaces either side of inserted newlines.
 
-## Phase 3.5 — Review & confirmation gate  (blocks all searching)
-- [ ] `lib/extract/confidence.ts` — attach provenance + confidence to every parsed field
-- [ ] `profile.confirmed_at` + `profile_draft` JSON column; confirmation is an explicit act  *(done in Phase 4)*
-- [ ] `app/api/profile/confirm/route.ts` — accepts the user-edited snapshot, validates, stores  *(done in Phase 4)*
-- [ ] `/profile` review UI — editable fields, confidence styling, missing-value gaps, chat panel
-- [ ] **Keyword priority** — pin / deprioritise / soften each term. This is where "which words actually
-      describe the job I want" gets decided by the user, and it replaces the uniform keyword weighting
-      that currently lets "Communication" outrank "React"
-- [ ] Search APIs reject requests when `confirmed_at` is null, with a clear "review your profile first" error  *(done in Phase 4)*
-- [ ] **GATE 3.5** — low-confidence keywords start excluded · editing then confirming persists · search refuses to run before confirmation · re-upload preserves confirmed values
+## Phase 3.5 — Review & confirmation gate  ✅ COMPLETE
+- [x] `lib/extract/confidence.ts` — attach provenance + confidence to every parsed field
+- [x] `profile.confirmed_at` + `confidence_json` column; confirmation is an explicit act  *(done in Phase 4)*
+- [x] `app/api/profile/confirm/route.ts` — accepts the user-edited snapshot, validates, stores  *(done in Phase 4)*
+- [x] `/profile` review UI — editable fields, confidence styling, missing-value gaps, upload/re-upload.
+      The chat panel (`refine_profile`) waits for Phase 7's tool loop and the screen says so
+- [x] **Keyword priority** — pin / deprioritise / soften each term (schema v3, `lib/match/priority.ts`).
+      This is where "which words actually describe the job I want" gets decided by the user, and it
+      replaces the uniform keyword weighting that currently lets "Communication" outrank "React"
+- [x] Search APIs reject requests when `confirmed_at` is null, with a clear "review your profile first" error  *(done in Phase 4)*
+- [x] **GATE 3.5** — low-confidence keywords start excluded · editing then confirming persists · search refuses to run before confirmation · re-upload preserves confirmed values → **96 tests green**
+
+### Phase 3.5 findings
+- **Provenance has to be produced at parse time, not reconstructed later.** The enrichment pass was
+  merging model keywords into the same `Set` as evidence-backed hits, so by the time the UI asked
+  "where did this come from?" the answer was gone. It now returns `modelKeywords`, `modelFields` and
+  `contradictions` separately.
+- **"Confirm" with an untouched draft is the dangerous case.** If the body omits keywords, the route
+  used to confirm everything in `profile.keywords`, including model guesses. It now defaults to the
+  assessed-included set, so pressing Confirm immediately cannot admit a guess into ranking.
+- **Priority is a user decision, not parser output.** Storing it in `keyword_priority_json` (not in
+  `confidence_json`) means a re-upload can re-derive confidence without discarding what the user
+  chose — and saving the profile without mentioning priorities no longer wipes them.
+- **Re-upload reconciliation is the only place a confirmed value outranks fresh evidence**, and it
+  always withdraws confirmation so the review screen reopens. Contradictions are reported as notes
+  instead of being resolved silently.
 
 ## Phase 4 — Search, rank, dedupe  ✅ COMPLETE
 > Runs exclusively against the **confirmed** profile snapshot (Phase 3.5). A draft parse is never

@@ -13,6 +13,7 @@ export interface RankedJob extends MergedJob {
   reasons: string[];
   matchedKeywords: string[];
   titleMatches: string[];
+  pinnedMatches: string[];
   recencyDays: number | null;
 }
 
@@ -45,6 +46,7 @@ export function profileToRanking(profile: Profile): RankingProfile {
     location: profile.location,
     seniority: profile.seniority,
     yearsExperience: profile.yearsExperience,
+    keywordPriority: profile.keywordPriority,
   };
 }
 
@@ -85,6 +87,7 @@ export function searchJobs(
       reasons: result.reasons,
       matchedKeywords: result.matchedKeywords,
       titleMatches: result.titleMatches,
+      pinnedMatches: result.pinnedMatches,
       recencyDays: result.recencyDays,
     };
   });

@@ -2,6 +2,10 @@ import { matchSkills, type SkillHit } from "./lexicon";
 
 export type Seniority = "junior" | "mid" | "senior" | "lead" | null;
 
+/** Where a value came from, so the review screen can label its confidence. */
+export type YearsSource = "explicit" | "derived" | null;
+export type SeniorityCue = "title" | "text" | null;
+
 export interface DeterministicProfile {
   fullName: string | null;
   email: string | null;
@@ -9,7 +13,11 @@ export interface DeterministicProfile {
   location: string | null;
   headline: string | null;
   yearsExperience: number | null;
+  /** "explicit" = the résumé says "9 years"; "derived" = inferred from dates. */
+  yearsSource: YearsSource;
   seniority: Seniority;
+  /** "title" = a role line said "Senior"; "text" = a cue elsewhere. */
+  seniorityCue: SeniorityCue;
   keywords: string[];
   titles: string[];
   locations: string[];
@@ -183,7 +191,10 @@ function despacedDateText(input: string): string {
  * numbers" scan is wrong: resumes are full of "Microsoft Office 2010, 2013,
  * 2016, 2019" and "Windows 7/8/10", which would invent a decade of experience.
  */
-function extractYears(text: string, sections: Record<string, string>): number | null {
+function extractYears(
+  text: string,
+  sections: Record<string, string>,
+): { years: number | null; source: YearsSource } {
   const explicit = Array.from(text.matchAll(/(\d{1,2})\+?\s*(?:years|yrs)\b/gi))
     .map((m) => Number(m[1]))
     .filter((n) => n > 0 && n < 45);
@@ -213,16 +224,33 @@ function extractYears(text: string, sections: Record<string, string>): number | 
   }
 
   const best = Math.max(explicitBest ?? 0, spanBest ?? 0);
-  return best > 0 ? best : null;
+  if (best <= 0) return { years: null, source: null };
+
+  // Prefer the figure the candidate actually wrote; a date-span derivation is
+  // more fragile and is flagged as such on the review screen.
+  const source: YearsSource = explicitBest !== null && explicitBest >= best ? "explicit" : "derived";
+  return { years: best, source };
 }
 
-function extractSeniority(text: string, titles: string[]): Seniority {
-  const haystack = `${titles.join(" ")} ${text}`.toLowerCase();
-  if (/\b(principal|staff|head of|chief|director|vice president)\b/.test(haystack)) return "lead";
-  if (/\b(senior|team lead|tech lead|manager)\b/.test(haystack)) return "senior";
-  if (/\b(junior|graduate|entry level|intern)\b/.test(haystack)) return "junior";
-  if (/\b(mid level|intermediate)\b/.test(haystack)) return "mid";
-  return null;
+function extractSeniority(
+  text: string,
+  titles: string[],
+): { seniority: Seniority; cue: SeniorityCue } {
+  const titleHaystack = titles.join(" ").toLowerCase();
+  const bodyHaystack = text.toLowerCase();
+
+  const levels: Array<[Seniority, RegExp]> = [
+    ["lead", /\b(principal|staff|head of|chief|director|vice president)\b/],
+    ["senior", /\b(senior|team lead|tech lead|manager)\b/],
+    ["junior", /\b(junior|graduate|entry level|intern)\b/],
+    ["mid", /\b(mid level|intermediate)\b/],
+  ];
+
+  for (const [level, pattern] of levels) {
+    if (pattern.test(titleHaystack)) return { seniority: level, cue: "title" };
+    if (pattern.test(bodyHaystack)) return { seniority: level, cue: "text" };
+  }
+  return { seniority: null, cue: null };
 }
 
 function extractLocations(text: string, sections: Record<string, string>): string[] {
@@ -263,6 +291,8 @@ export function extractProfile(text: string): DeterministicProfile {
   const titles = extractTitles(sections);
   const skillHits = extractKeywords(text, sections);
   const locations = extractLocations(text, sections);
+  const years = extractYears(text, sections);
+  const seniority = extractSeniority(text, titles);
 
   return {
     fullName: extractName(text),
@@ -270,8 +300,10 @@ export function extractProfile(text: string): DeterministicProfile {
     phone: extractPhone(text),
     location: locations[0] ?? null,
     headline: titles[0] ?? null,
-    yearsExperience: extractYears(text, sections),
-    seniority: extractSeniority(text, titles),
+    yearsExperience: years.years,
+    yearsSource: years.source,
+    seniority: seniority.seniority,
+    seniorityCue: seniority.cue,
     keywords: skillHits.slice(0, 40).map((h) => h.canonical),
     titles,
     locations,

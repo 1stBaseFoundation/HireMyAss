@@ -236,6 +236,7 @@ describe("review gate", () => {
     ).map((c) => c.name);
     expect(columns).toContain("confirmed_at");
     expect(columns).toContain("confidence_json");
+    expect(columns).toContain("keyword_priority_json");
   });
 });
 

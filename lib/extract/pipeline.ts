@@ -1,12 +1,17 @@
 import { extractProfile } from "./deterministic";
+import { assessProfile, type ProfileConfidence } from "./confidence";
 import { enrichProfile } from "./llm-extract";
+import { reconcileWithConfirmed } from "./reconcile";
 import { ocrPages } from "./ocr";
 import { rasterizePdf } from "./raster";
 import { extractText, type TextExtraction } from "./text";
-import { saveProfile, type Profile } from "@/lib/db/profile";
+import { getProfile, saveProfile, type Profile } from "@/lib/db/profile";
+import { getDb } from "@/lib/db";
 
 export interface IngestResult {
   profile: Profile;
+  /** Provenance/confidence per field, for the review screen. */
+  confidence: ProfileConfidence;
   parseMethod: "pdf-text" | "pdf-ocr" | "docx" | "plain";
   pages: number;
   ocrUsed: boolean;
@@ -84,8 +89,30 @@ export async function ingestResume(
 
   const enriched = allowLlm
     ? await enrichProfile(deterministic, text)
-    : { profile: deterministic, usedLlm: false, filled: [], note: "model skipped" };
+    : { profile: deterministic, usedLlm: false, filled: [], note: "model skipped", modelFields: [], modelKeywords: [], contradictions: [] };
   if (enriched.note) notes.push(`model: ${enriched.note}`);
+
+  // The deterministic parse is the evidence base; the enrichment pass only
+  // tells us what it *guessed*, so confidence is assessed against both.
+  const confidence = assessProfile(deterministic, text, {
+    modelFields: enriched.modelFields,
+    modelKeywords: enriched.modelKeywords,
+    contradictions: enriched.contradictions,
+  });
+  const excluded = confidence.keywords.filter((keyword) => !keyword.included).length;
+  if (excluded > 0) notes.push(`${excluded} low-confidence keyword(s) start excluded`);
+  if (confidence.gaps.length > 0) {
+    notes.push(`missing: ${confidence.gaps.join(", ")}`);
+  }
+
+  // A confirmed profile is user intent, not parser output: a re-upload keeps
+  // whatever the user already agreed to unless the new document contradicts it.
+  // Confirmation itself is always withdrawn, which reopens the review screen.
+  const reconciled = reconcileWithConfirmed(getProfile(getDb()), enriched.profile, confidence);
+  notes.push(...reconciled.notes);
+  if (reconciled.carriedFields.length > 0) {
+    notes.push(`kept confirmed: ${reconciled.carriedFields.join(", ")}`);
+  }
 
   const method: IngestResult["parseMethod"] = ocrUsed
     ? "pdf-ocr"
@@ -95,24 +122,29 @@ export async function ingestResume(
         ? "docx"
         : "plain";
 
-  const profile = saveProfile({
-    fullName: enriched.profile.fullName,
-    headline: enriched.profile.headline,
-    email: enriched.profile.email,
-    phone: enriched.profile.phone,
-    location: enriched.profile.location,
-    yearsExperience: enriched.profile.yearsExperience,
-    seniority: enriched.profile.seniority,
-    rawText: text,
-    keywords: enriched.profile.keywords,
-    titles: enriched.profile.titles,
-    locations: enriched.profile.locations,
-    sourceFile: filename,
-    parseMethod: method,
-  });
+  const profile = saveProfile(
+    {
+      fullName: reconciled.values.fullName,
+      headline: reconciled.values.headline,
+      email: reconciled.values.email,
+      phone: reconciled.values.phone,
+      location: reconciled.values.location,
+      yearsExperience: reconciled.values.yearsExperience,
+      seniority: reconciled.values.seniority,
+      rawText: text,
+      keywords: reconciled.keywords,
+      titles: enriched.profile.titles,
+      locations: enriched.profile.locations,
+      sourceFile: filename,
+      parseMethod: method,
+    },
+    undefined,
+    { confidence: reconciled.confidence as unknown as Record<string, unknown> },
+  );
 
   return {
     profile,
+    confidence: reconciled.confidence,
     parseMethod: method,
     pages,
     ocrUsed,

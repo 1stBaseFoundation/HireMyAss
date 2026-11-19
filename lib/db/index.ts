@@ -59,6 +59,14 @@ export function migrate(db: DatabaseSync): void {
   ensureColumn(db, "profile", "confirmed_at", "confirmed_at INTEGER");
   ensureColumn(db, "profile", "confidence_json", "confidence_json TEXT NOT NULL DEFAULT '{}'");
 
+  // v2 -> v3: user-defined keyword priority.
+  ensureColumn(
+    db,
+    "profile",
+    "keyword_priority_json",
+    "keyword_priority_json TEXT NOT NULL DEFAULT '{}'",
+  );
+
   const current = (db.prepare("PRAGMA user_version").get() as { user_version?: number } | undefined)
     ?.user_version;
   if (current !== SCHEMA_VERSION) {

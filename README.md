@@ -22,10 +22,10 @@ résumé ──▶ parse ──▶ review & confirm ──▶ fetch 8 sources �
 | 0–2 | Scaffold, SQLite data layer, résumé ingest (deterministic + LLM gap-fill + VLM OCR) | ✅ |
 | 3 | Eight job-source adapters, TTL cache, per-source health | ✅ |
 | 4 | Ranking, cross-source dedupe, filters, **confirmation gate** | ✅ |
-| 3.5 | `/profile` review UI, per-field confidence, keyword priority | ⏳ next |
-| 5–8 | Results/applications/settings UI, applied-seen state machine, chat→filters, hardening | ⏳ |
+| 3.5 | `/profile` review UI, per-field confidence, keyword priority | ✅ |
+| 5–8 | Results/applications/settings UI, applied-seen state machine, chat→filters, hardening | ⏳ next |
 
-**74 tests green**, 9 more gated behind env flags because they need a GPU or the
+**96 tests green**, 14 more gated behind env flags because they need a GPU or the
 network. Phase 4 was validated against 2,547 live postings.
 
 ## Principles
@@ -308,11 +308,10 @@ Written down because each one cost real time:
 
 ## Roadmap
 
-- **3.5** — `/profile` review UI: editable fields, confidence styling, gaps for
-  missing values, keyword priority, chat refinement. Unblocks trustworthy search.
-- **5** — UI: `/`, `/profile`, `/applications`, `/settings`.
+- **5** — UI: `/` filter chips + job cards, `/applications`, `/settings`.
 - **6** — applied/seen state machine, strict-mode toggle.
-- **7** — chat → filters tool calling, vision sidecar.
+- **7** — chat → filters tool calling, vision sidecar. This is also where the
+  `/profile` chat panel (`refine_profile`) lands; the screen currently says so.
 - **8** — hardening, attribution surfacing, docs.
 
 `TODO.md` carries the full plan, including the review-stage contract and the
