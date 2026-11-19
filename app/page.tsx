@@ -1,4 +1,5 @@
 import { env } from "@/lib/env";
+import Link from "next/link";
 
 const rows: Array<[string, string]> = [
   ["Coordinator", `${env.coordinator.url} · ${env.coordinator.label}`],
@@ -52,6 +53,13 @@ export default function Home() {
         </code>{" "}
         to bring both GPU instances up.
       </p>
+
+      <Link
+        href="/profile"
+        className="w-fit rounded-lg bg-accent-600 px-4 py-2 text-sm font-medium text-ink-50 hover:bg-accent-500"
+      >
+        Review your résumé →
+      </Link>
     </main>
   );
 }

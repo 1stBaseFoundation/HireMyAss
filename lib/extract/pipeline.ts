@@ -1,10 +1,12 @@
 import { extractProfile } from "./deterministic";
 import { assessProfile, type ProfileConfidence } from "./confidence";
 import { enrichProfile } from "./llm-extract";
+import { reconcileWithConfirmed } from "./reconcile";
 import { ocrPages } from "./ocr";
 import { rasterizePdf } from "./raster";
 import { extractText, type TextExtraction } from "./text";
-import { saveProfile, type Profile } from "@/lib/db/profile";
+import { getProfile, saveProfile, type Profile } from "@/lib/db/profile";
+import { getDb } from "@/lib/db";
 
 export interface IngestResult {
   profile: Profile;
@@ -103,6 +105,15 @@ export async function ingestResume(
     notes.push(`missing: ${confidence.gaps.join(", ")}`);
   }
 
+  // A confirmed profile is user intent, not parser output: a re-upload keeps
+  // whatever the user already agreed to unless the new document contradicts it.
+  // Confirmation itself is always withdrawn, which reopens the review screen.
+  const reconciled = reconcileWithConfirmed(getProfile(getDb()), enriched.profile, confidence);
+  notes.push(...reconciled.notes);
+  if (reconciled.carriedFields.length > 0) {
+    notes.push(`kept confirmed: ${reconciled.carriedFields.join(", ")}`);
+  }
+
   const method: IngestResult["parseMethod"] = ocrUsed
     ? "pdf-ocr"
     : extracted.method === "pdf-text"
@@ -113,27 +124,27 @@ export async function ingestResume(
 
   const profile = saveProfile(
     {
-      fullName: enriched.profile.fullName,
-      headline: enriched.profile.headline,
-      email: enriched.profile.email,
-      phone: enriched.profile.phone,
-      location: enriched.profile.location,
-      yearsExperience: enriched.profile.yearsExperience,
-      seniority: enriched.profile.seniority,
+      fullName: reconciled.values.fullName,
+      headline: reconciled.values.headline,
+      email: reconciled.values.email,
+      phone: reconciled.values.phone,
+      location: reconciled.values.location,
+      yearsExperience: reconciled.values.yearsExperience,
+      seniority: reconciled.values.seniority,
       rawText: text,
-      keywords: enriched.profile.keywords,
+      keywords: reconciled.keywords,
       titles: enriched.profile.titles,
       locations: enriched.profile.locations,
       sourceFile: filename,
       parseMethod: method,
     },
     undefined,
-    { confidence: confidence as unknown as Record<string, unknown> },
+    { confidence: reconciled.confidence as unknown as Record<string, unknown> },
   );
 
   return {
     profile,
-    confidence,
+    confidence: reconciled.confidence,
     parseMethod: method,
     pages,
     ocrUsed,

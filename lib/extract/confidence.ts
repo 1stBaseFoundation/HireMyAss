@@ -31,6 +31,7 @@ export type Provenance =
   | "title-cue"
   | "regex"
   | "model"
+  | "confirmed"
   | "missing";
 
 export const CONFIDENCE_FIELDS = [
