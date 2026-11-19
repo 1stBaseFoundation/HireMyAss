@@ -7,6 +7,7 @@ import {
   saveProfile,
   toProfileInput,
 } from "@/lib/db/profile";
+import { defaultConfirmedKeywords } from "@/lib/extract/confidence";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -58,6 +59,13 @@ export async function POST(request: Request) {
 
   const edits = parsed.data;
   const base = toProfileInput(existing);
+
+  // An empty body means "confirm exactly what was parsed", and "exactly what
+  // was parsed" excludes low-confidence terms — a model guess must never sneak
+  // into ranking just because the reviewer pressed Confirm without touching it.
+  if (edits.keywords === undefined) {
+    edits.keywords = defaultConfirmedKeywords(existing.keywords, existing.confidence);
+  }
 
   const merged = {
     ...base,

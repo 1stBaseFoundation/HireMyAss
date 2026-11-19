@@ -1,4 +1,5 @@
 import { extractProfile } from "./deterministic";
+import { assessProfile, type ProfileConfidence } from "./confidence";
 import { enrichProfile } from "./llm-extract";
 import { ocrPages } from "./ocr";
 import { rasterizePdf } from "./raster";
@@ -7,6 +8,8 @@ import { saveProfile, type Profile } from "@/lib/db/profile";
 
 export interface IngestResult {
   profile: Profile;
+  /** Provenance/confidence per field, for the review screen. */
+  confidence: ProfileConfidence;
   parseMethod: "pdf-text" | "pdf-ocr" | "docx" | "plain";
   pages: number;
   ocrUsed: boolean;
@@ -84,8 +87,21 @@ export async function ingestResume(
 
   const enriched = allowLlm
     ? await enrichProfile(deterministic, text)
-    : { profile: deterministic, usedLlm: false, filled: [], note: "model skipped" };
+    : { profile: deterministic, usedLlm: false, filled: [], note: "model skipped", modelFields: [], modelKeywords: [], contradictions: [] };
   if (enriched.note) notes.push(`model: ${enriched.note}`);
+
+  // The deterministic parse is the evidence base; the enrichment pass only
+  // tells us what it *guessed*, so confidence is assessed against both.
+  const confidence = assessProfile(deterministic, text, {
+    modelFields: enriched.modelFields,
+    modelKeywords: enriched.modelKeywords,
+    contradictions: enriched.contradictions,
+  });
+  const excluded = confidence.keywords.filter((keyword) => !keyword.included).length;
+  if (excluded > 0) notes.push(`${excluded} low-confidence keyword(s) start excluded`);
+  if (confidence.gaps.length > 0) {
+    notes.push(`missing: ${confidence.gaps.join(", ")}`);
+  }
 
   const method: IngestResult["parseMethod"] = ocrUsed
     ? "pdf-ocr"
@@ -95,24 +111,29 @@ export async function ingestResume(
         ? "docx"
         : "plain";
 
-  const profile = saveProfile({
-    fullName: enriched.profile.fullName,
-    headline: enriched.profile.headline,
-    email: enriched.profile.email,
-    phone: enriched.profile.phone,
-    location: enriched.profile.location,
-    yearsExperience: enriched.profile.yearsExperience,
-    seniority: enriched.profile.seniority,
-    rawText: text,
-    keywords: enriched.profile.keywords,
-    titles: enriched.profile.titles,
-    locations: enriched.profile.locations,
-    sourceFile: filename,
-    parseMethod: method,
-  });
+  const profile = saveProfile(
+    {
+      fullName: enriched.profile.fullName,
+      headline: enriched.profile.headline,
+      email: enriched.profile.email,
+      phone: enriched.profile.phone,
+      location: enriched.profile.location,
+      yearsExperience: enriched.profile.yearsExperience,
+      seniority: enriched.profile.seniority,
+      rawText: text,
+      keywords: enriched.profile.keywords,
+      titles: enriched.profile.titles,
+      locations: enriched.profile.locations,
+      sourceFile: filename,
+      parseMethod: method,
+    },
+    undefined,
+    { confidence: confidence as unknown as Record<string, unknown> },
+  );
 
   return {
     profile,
+    confidence,
     parseMethod: method,
     pages,
     ocrUsed,
