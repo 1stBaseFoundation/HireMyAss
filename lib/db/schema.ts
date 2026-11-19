@@ -4,8 +4,11 @@
  *
  * v2 adds the review gate: a profile is not usable for ranking until the user
  * has explicitly confirmed it (see TODO.md "Review stage").
+ *
+ * v3 adds user-defined keyword priority (pin / soften), the review-screen
+ * control that replaces the uniform keyword weighting of Phase 4.
  */
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
 
 export const SCHEMA_SQL = /* sql */ `
 PRAGMA journal_mode = WAL;
@@ -30,6 +33,8 @@ CREATE TABLE IF NOT EXISTS profile (
   -- v2: review gate. NULL confirmed_at means the parse is still a draft.
   confirmed_at    INTEGER,
   confidence_json TEXT NOT NULL DEFAULT '{}',
+  -- v3: {"React":"pin","Communication":"soften"} — deviations from 'normal'.
+  keyword_priority_json TEXT NOT NULL DEFAULT '{}',
   created_at      INTEGER NOT NULL,
   updated_at      INTEGER NOT NULL
 );

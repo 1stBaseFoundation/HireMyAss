@@ -8,6 +8,7 @@ import {
   toProfileInput,
 } from "@/lib/db/profile";
 import { defaultConfirmedKeywords } from "@/lib/extract/confidence";
+import { normalizePriorities } from "@/lib/match/priority";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -30,6 +31,10 @@ const ConfirmSchema = z.object({
   keywords: z.array(z.string().min(1).max(60)).max(80).optional(),
   titles: z.array(z.string().min(1).max(120)).max(30).optional(),
   locations: z.array(z.string().min(1).max(80)).max(30).optional(),
+  /** Review-screen decisions: {"React":"pin","Communication":"soften"}. */
+  keywordPriority: z
+    .record(z.string().max(60), z.enum(["pin", "normal", "soften"]))
+    .optional(),
 });
 
 export async function POST(request: Request) {
@@ -59,18 +64,19 @@ export async function POST(request: Request) {
 
   const edits = parsed.data;
   const base = toProfileInput(existing);
+  const { keywordPriority, ...fieldEdits } = edits;
 
   // An empty body means "confirm exactly what was parsed", and "exactly what
   // was parsed" excludes low-confidence terms — a model guess must never sneak
   // into ranking just because the reviewer pressed Confirm without touching it.
-  if (edits.keywords === undefined) {
-    edits.keywords = defaultConfirmedKeywords(existing.keywords, existing.confidence);
+  if (fieldEdits.keywords === undefined) {
+    fieldEdits.keywords = defaultConfirmedKeywords(existing.keywords, existing.confidence);
   }
 
   const merged = {
     ...base,
     ...Object.fromEntries(
-      Object.entries(edits).filter(([, value]) => value !== undefined),
+      Object.entries(fieldEdits).filter(([, value]) => value !== undefined),
     ),
   } as typeof base;
 
@@ -83,7 +89,9 @@ export async function POST(request: Request) {
     return true;
   });
 
-  saveProfile(merged, db);
+  saveProfile(merged, db, {
+    keywordPriority: keywordPriority ? normalizePriorities(keywordPriority) : undefined,
+  });
   const confirmed = confirmProfile(db);
 
   return NextResponse.json({ profile: confirmed });

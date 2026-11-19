@@ -1,4 +1,5 @@
 import type { JobRow } from "@/lib/db/jobs";
+import { priorityMultiplier, type KeywordPriorityMap } from "./priority";
 
 /**
  * Ranking.
@@ -16,6 +17,8 @@ export interface RankingProfile {
   location: string | null;
   seniority: string | null;
   yearsExperience: number | null;
+  /** Review-screen decisions; absent entries rank as "normal". */
+  keywordPriority?: KeywordPriorityMap;
 }
 
 export interface ScoreResult {
@@ -23,6 +26,8 @@ export interface ScoreResult {
   reasons: string[];
   matchedKeywords: string[];
   titleMatches: string[];
+  /** Keywords the user pinned that this job matched. */
+  pinnedMatches: string[];
   recencyDays: number | null;
 }
 
@@ -93,6 +98,7 @@ export function scoreJob(
   let points = 0;
   const matchedKeywords: string[] = [];
   const titleMatches: string[] = [];
+  const pinnedMatches: string[] = [];
 
   for (const keyword of profile.keywords) {
     // A one-character "skill" is never evidence — it matches every stray letter
@@ -101,12 +107,16 @@ export function scoreJob(
     if (keyword.trim().length < 2) continue;
 
     const term = keyword.toLowerCase();
-    const weight = titleMultiplier > 0 ? idf.get(term) ?? 1 : 1;
+    const multiplier = priorityMultiplier(profile.keywordPriority, keyword);
+    // Pinned terms dominate; softened terms still count as evidence but must
+    // not be the reason a job outranks an exact role match.
+    const weight = (titleMultiplier > 0 ? idf.get(term) ?? 1 : 1) * multiplier;
     const inTitle = mentions(title, term);
     const inBody = inTitle || mentions(body, term);
     if (!inBody) continue;
 
     matchedKeywords.push(keyword);
+    if (multiplier > 1) pinnedMatches.push(keyword);
     if (inTitle) {
       titleMatches.push(keyword);
       points += titleMultiplier * weight;
@@ -156,6 +166,9 @@ export function scoreJob(
   );
 
   const reasons: string[] = [];
+  if (pinnedMatches.length > 0) {
+    reasons.push(`pinned: ${pinnedMatches.slice(0, 3).join(", ")}`);
+  }
   if (titleMatches.length > 0) {
     reasons.push(`${titleMatches.slice(0, 3).join(", ")} in title`);
   }
@@ -185,6 +198,7 @@ export function scoreJob(
     reasons: reasons.slice(0, 5),
     matchedKeywords,
     titleMatches,
+    pinnedMatches,
     recencyDays,
   };
 }

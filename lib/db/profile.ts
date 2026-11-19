@@ -1,5 +1,10 @@
 import type { DatabaseSync } from "node:sqlite";
 import { getDb, nowMs, parseJson } from "./index";
+import {
+  normalizePriorities,
+  prunePriorities,
+  type KeywordPriorityMap,
+} from "@/lib/match/priority";
 
 export interface Profile {
   fullName: string | null;
@@ -19,13 +24,15 @@ export interface Profile {
   confirmedAt: number | null;
   /** Per-field provenance/confidence, produced by the review stage. */
   confidence: Record<string, unknown>;
+  /** User decisions from the review screen; only non-default entries are stored. */
+  keywordPriority: KeywordPriorityMap;
   createdAt: number;
   updatedAt: number;
 }
 
 export type ProfileInput = Omit<
   Profile,
-  "createdAt" | "updatedAt" | "confirmedAt" | "confidence"
+  "createdAt" | "updatedAt" | "confirmedAt" | "confidence" | "keywordPriority"
 >;
 
 export interface SaveProfileOptions {
@@ -35,6 +42,8 @@ export interface SaveProfileOptions {
    */
   keepConfirmation?: boolean;
   confidence?: Record<string, unknown>;
+  /** Replaces the stored priority map. Omit to keep whatever the user chose. */
+  keywordPriority?: KeywordPriorityMap;
 }
 
 interface RawProfileRow {
@@ -53,6 +62,7 @@ interface RawProfileRow {
   parse_method: string | null;
   confirmed_at: number | null;
   confidence_json: string;
+  keyword_priority_json: string;
   created_at: number;
   updated_at: number;
 }
@@ -76,6 +86,9 @@ export function getProfile(db: DatabaseSync = getDb()): Profile | null {
     parseMethod: row.parse_method,
     confirmedAt: row.confirmed_at,
     confidence: parseJson<Record<string, unknown>>(row.confidence_json, {}),
+    keywordPriority: normalizePriorities(
+      parseJson<Record<string, unknown>>(row.keyword_priority_json, {}),
+    ),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -89,17 +102,32 @@ export function saveProfile(
 ): Profile {
   const ts = nowMs();
   const existing = db
-    .prepare("SELECT created_at, confirmed_at, confidence_json FROM profile WHERE id = 1")
+    .prepare(
+      "SELECT created_at, confirmed_at, confidence_json, keyword_priority_json FROM profile WHERE id = 1",
+    )
     .get() as
-    | { created_at: number; confirmed_at: number | null; confidence_json: string }
+    | {
+        created_at: number;
+        confirmed_at: number | null;
+        confidence_json: string;
+        keyword_priority_json: string;
+      }
     | undefined;
+
+  // Priorities belong to the user, not to the parse: keep what they chose
+  // unless the caller explicitly replaces it, then drop terms that are gone.
+  const priorities = prunePriorities(
+    options.keywordPriority ??
+      normalizePriorities(parseJson<Record<string, unknown>>(existing?.keyword_priority_json, {})),
+    input.keywords,
+  );
 
   db.prepare(
     `INSERT INTO profile (
        id, full_name, headline, email, phone, location, years_experience, seniority,
        raw_text, keywords_json, titles_json, locations_json, source_file, parse_method,
-       confirmed_at, confidence_json, created_at, updated_at
-     ) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       confirmed_at, confidence_json, keyword_priority_json, created_at, updated_at
+     ) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT (id) DO UPDATE SET
        full_name = excluded.full_name,
        headline = excluded.headline,
@@ -116,6 +144,7 @@ export function saveProfile(
        parse_method = excluded.parse_method,
        confirmed_at = excluded.confirmed_at,
        confidence_json = excluded.confidence_json,
+       keyword_priority_json = excluded.keyword_priority_json,
        updated_at = excluded.updated_at`,
   ).run(
     input.fullName,
@@ -133,6 +162,7 @@ export function saveProfile(
     input.parseMethod,
     options.keepConfirmation ? (existing?.confirmed_at ?? null) : null,
     JSON.stringify(options.confidence ?? existing?.confidence_json ?? {}),
+    JSON.stringify(priorities),
     existing?.created_at ?? ts,
     ts,
   );
